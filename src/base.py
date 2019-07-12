@@ -108,7 +108,7 @@ class APISpiderTask(object):
         SpiderTaskHelper.write2jsonfile(self.outputfn, data=data)
 
     def __str__(self):
-        return "url_pattern: {} params:{}".format(self.url_pattern, params)
+        return "url_pattern: {} params:{}".format(self.url_pattern, self.params)
 
 class SpiderFetcher(object):
 
@@ -147,7 +147,17 @@ class SpiderFetcher(object):
             @rate_control(max_time=self.max_time, min_time=self.min_time)
             def execute(task):
                 task.execute()
-            execute(task)
+            sleep = 0
+            while True:
+                try:
+                    if sleep > 60 * 5:
+                        SystemExit.code(1)
+                    time.sleep(sleep)
+                    execute(task)
+                    break
+                except Exception as e:
+                    sleep += 5
+                    print_f("retry task: {} because {}".format(task, str(e)))
 
     def task_generator(self):
         pass

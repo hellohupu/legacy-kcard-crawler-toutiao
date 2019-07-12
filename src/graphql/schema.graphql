@@ -1,0 +1,423 @@
+# 下文有些出现了类似
+# @cypher(statement: "MATCH (n:Nothing) WHERE FALSE RETURN n")
+# 这样无用的注解，原因是neo4j-graphql-js这个框架在自动生成resolver时，
+# 对于非简单类型的值都需要标记@relation或者@cypher注解求值，即是我们实现了自己的resolver。
+# 所以标记这样一个注解只是为了遵循框架标准流程。
+
+#type Query {
+#    # 大部分type都由框架自动生成了query，以下仅列出手动定制的query type
+#
+#    Stats(
+#        domain:
+#    ): Stats
+#}
+
+type UserInfo {  # 某个渠道的个人信息
+    source: Source @relation(name: "IS_FROM", direction: OUT)
+    id: String! # 用户ID（注意：是渠道给出的系统ID）
+    nickname: String # 昵称
+    type: UserType # 用户类型（kol博主，user普通用户）
+    isPrimary: Boolean # 此渠道是否是博主个人信息主要发布渠道
+    phone: String # 电话号
+    wechat: String # 微信号
+    avatar: String # 用户头像的链接，要求是一个可访问的图片的URL
+    signature: String # 用户签名
+    gender: Gender # 性别
+    birthdate: String # 生日
+    province: Province @relation(name: "IS_LOCATED_IN", direction: OUT) # 省份
+    city: City @relation(name: "IS_LOCATED_IN", direction: OUT) # 城市
+    constellation: Constellation # 星座
+    mcn: Mcn @relation(name: "IS_EMPLOYED_BY", direction: OUT)
+    mcnId: String @cypher(statement: """
+    MATCH
+    (this) -[:IS_FROM]-> (s:Source),
+    (this) -[:IS_EMPLOYED_BY]-> (m:Mcn),
+    (m) -[r:HAS_KOLS_FROM]-> (s)
+    RETURN r.id
+    """) # mcn在source字段指定的渠道下的系统id
+    tags: [String!] @cypher(statement: """
+    MATCH
+    (this) -[:HAS_TAG]-> (t:Tag)
+    RETURN collect(t.name)
+    """) # 标签
+    items: [Item!] @relation(name: "HAS_ITEM", direction: OUT) # 案例
+    priceVideo: Int # 拍摄单条视频的报价（抖音中指短视频）
+    priceLongVideo: Int # 拍摄单条视频的报价（抖音中指短视频）
+    priceArticle: Int # 发表一篇文章的报价
+    following: Int # 关注数
+    follower: Int # 粉丝数
+    viewMedian: Int # 观看量中位数（观看量指视频播放量或文章阅读量）
+    viewTotal: Int # 总观看量
+    likeMean: Int # 平均点赞量
+    favoriteMean: Int # 平均收藏量
+    commentMean: Int # 平均评论量
+    shareMean: Int # 平均转发量
+    itemCompleted: Int # 已完成案例数
+    itemTotal: Int # 总案例数
+    itemCompleteTimeMean: Int # 平均每笔订单完成耗时
+    timeCreated: String # 博主在渠道系统的注册时间
+    timeUpdated: String # 博主在渠道系统的最后一次更新时间
+    ctime: String # 该条数据在系统的创建时间
+    mtime: String # 该条数据在系统的修改时间
+
+    stats: [Stats!] @relation(name: "HAS_STATS", direction: OUT) # 用户含有统计信息
+}
+
+enum UserType {
+    KOL
+    USER
+}
+
+enum Gender {
+    MALE
+    FEMALE
+}
+
+enum Constellation {
+    AQUARIUS # 水瓶座(1/20-2/18)
+    PISCES # 雙魚座(2/19-3/20)
+    ARIES # 牧羊座(3/21-4/20)
+    TAURUS # 金牛座(4/21-5/20)
+    GEMINI # 雙子座(5/21-6/21)
+    CANCER # 巨蟹座(6/22-7/22)
+    LEO # 獅子座(7/23-8/22)
+    VIRGO # 處女座(8/23-9/22)
+    LIBRA # 天秤座(9/23-10/23)
+    SCORPIO # 天蠍座(10/24-11/22)
+    SAGITTARIUS # 射手座(11/23-12/21)
+    CAPRICORN # 摩羯座(12/22-1/20)
+}
+
+type Source { # 渠道
+    id: ID! # 渠道名称英文标识符（如douyin，kuaishou等，建议统一取自官网www.?.com中?名称）
+    name: String # 渠道名称中文
+    url: String # 渠道官网链接
+    kols: [UserInfo!]! @relation(name: "IS_FROM", direction: IN)
+}
+
+type Province {
+    name: ID!
+    kols: [UserInfo!]! @relation(name: "IS_LOCATED_IN", direction: IN)
+}
+
+type City {
+    name: ID!
+    kols: [UserInfo!]! @relation(name: "IS_LOCATED_IN", direction: IN)
+}
+
+type Tag {
+    name: ID!
+    value: String
+    kols: [UserInfo!]! @relation(name: "HAS_TAG", direction: IN)
+}
+
+type Mcn {
+    name: ID! # 名称
+    fullName: String # 完整注册公司名称
+    logo: String # 要求是一个可访问的图片的URL
+    description: String # 机构描述
+    kolTotal: Int # 总签约博主数
+    followerTotal: Int # 总博主粉丝数
+    kols: [UserInfo!]! @relation(name: "IS_EMPLOYED_BY", direction: IN)
+
+}
+
+type Item { # 案例
+    id: String! # 案例ID（注意：是渠道给出的系统ID）
+    title: String # 标题
+    author: UserInfo @relation(name: "HAS_ITEM", direction: IN)
+    type: ItemType # 类型（article文章或video视频）
+    cover: String # 封面图片URL
+    coverAnimated: String # 封面动态图片URL
+    url: String # 案例链接，能直接观看内容，如抖音视频链接等
+    content: String # 案例内容，如果是文章那就是正文内容
+    brands: [Brand!]! @relation(name: "HAS_BRAND", direction: OUT) # 关联品牌
+    comments: [Comment!]! @relation(name: "HAS_COMMENT", direction: OUT) # 评论内容
+    exposure: Int # 曝光量
+    view: Int # 观看量（观看量指视频播放量或文章阅读量）
+    like: Int # 点赞量
+    favorite: Int # 收藏量
+    comment: Int # 评论量
+    share: Int # 转发量
+    timeCreated: String # 案例在渠道系统的发布时间
+    timeUpdated: String # 案例在渠道系统的最后一次更新时间
+    ctime: String # 该条数据在系统的创建时间
+    mtime: String # 该条数据在系统的修改时间
+
+    stats: Stats @relation(name: "HAS_STATS", direction: OUT) # 案例有相关统计信息
+}
+
+enum ItemType { # 案例类型
+    ARTICLE # 文章（如小红书）
+    VIDEO # 视频（如抖音）
+}
+
+type Brand { # 品牌
+    name: ID!
+}
+
+type Comment { # 案例评论
+    content: String # 评论内容
+    item: Item @relation(name: "HAS_COMMENT", direction: IN) # 案例
+    author: UserInfo @relation(name: "IS_COMMENTED_BY", direction: OUT) # 评论作者
+    like: Int # 点赞量
+    timeCreated: String # 评论在渠道系统的发布时间
+    timeUpdated: String # 评论在渠道系统的最后一次更新时间
+}
+
+type Stats { # 统计图表，一般可以可视化为图或表
+    domain: StatsDomain! # 业务域
+    type: StatsType! # 统计类型
+    user: UserInfo @relation(name: "HAS_STATS", direction: IN) # 图表关联用户
+    item: Item @relation(name: "HAS_STATS", direction: IN) # 图表关联案例
+
+    key: String # 内部使用，用于关联Neo4J中的Stats实体点和MongoDB中的统计数据
+    data( # 统计数据
+        dimensions: [String!]!, # 该统计图表的划分维度（即数据data中有且仅有这些标签字段有值）
+        time: String, # 若指定该参数，则只获取某一个时间戳下的数据
+        start: String, # 时间区间开始时间戳，结合end或duration或current，获取某一时间区间内的数据，区间左开右闭
+        end: String, # 时间区间结束时间戳，结合start或duration或current，获取某一时间区间内的数据，区间左开右闭
+        duration: TimeDuration, # 时间区间长度，结合start或end或current，获取某一时间区间内的数据，区间左开右闭
+        current: TimePosition # 时间区间结束时间位置，结合start或duration或current，获取某一时间区间内的数据，区间左开右闭
+    ): [StatsData!]! @cypher(statement: "MATCH (n:Nothing) WHERE FALSE RETURN n")
+}
+
+enum TimePosition { # 用于指代某一个时间位置
+    NOW # 当前本地时间
+    LATEST # 数据库中最新数据时间
+}
+
+enum TimeUnit {
+    YEAR
+    MONTHS
+    WEEKS
+    DAYS
+    HOURS
+    MINUTES
+    SECONDS
+    MILLISECONDS
+}
+
+input TimeDuration {
+    length: Float!
+    unit: TimeUnit!
+}
+
+type StatsData { # 统计数据
+    time: String! # 此条统计数据的业务时间
+
+    # 标签字段（用于划分业务维度和范围，定位和time series DB中的tags类似）
+    # 标签字段若更新，记得修改对应的StatsDataInput和common中的字段
+    gender: Gender # 性别
+    age: IntRange @cypher(statement: "MATCH (n:Nothing) WHERE FALSE RETURN n") # 年龄区间
+    interest: Tag @cypher(statement: "MATCH (n:Nothing) WHERE FALSE RETURN n") # 兴趣，直接关联标签Tag，一般指粉丝感兴趣的标签
+    province: Province @cypher(statement: "MATCH (n:Nothing) WHERE FALSE RETURN n") # 省份
+    activity: String # 活跃度，一般指粉丝活跃度，如轻度、中度、重度
+    phoneBrand: Brand @cypher(statement: "MATCH (n:Nothing) WHERE FALSE RETURN n") # 手机品牌，一般指粉丝使用的手机品牌
+
+    # 值字段（用于存储统计值，定位和time series DB中的fields类似）
+    percent: Float # 百分比值，一般用于统计分布比例，如男粉丝占全部粉丝的比例等
+    count: Int # 整数总和，一般用于统计分布大小，如男粉丝的总数等
+    follower: Int # 粉丝数量
+    exposure: Int # 曝光量
+    view: Int # 观看量（观看量指视频播放量或文章阅读量）
+    like: Int # 点赞量
+    favorite: Int # 收藏量
+    comment: Int # 评论量
+    share: Int # 转发量
+}
+
+type IntRange { # 表示一个整数区间范围，左开右闭，例如[3, 6)
+    start: Int # 范围起始，为空则表示-∞
+    end: Int # 范围终止，为空则表示+∞
+}
+
+enum StatsDomain { # 关于统计分布数据的业务域
+    FOLLOWER # 某个博主的粉丝画像（如年龄分布、地域分布、粉丝数变化等）
+    ITEM # 具体某个案例的统计（如阅读数、点赞数随时间变化曲线等）
+    PRODUCT # 具体某个货物的卖货统计（如销量等）
+}
+
+enum StatsType { # 关于统计分布数据的类型，结合StatsDomain来看
+
+    # FOLLOWER/DISTRIBUTION，某博主的粉丝分布情况
+    # 此子域下的统计图表StatsData中，以下的字段可以有值：
+    # 标签字段：gender，age，tag，province，activity，phoneBrand
+    # 值字段：percent，count
+    DISTRIBUTION
+
+    # FOLLOWER/TREND，某博主的粉丝趋势变化情况
+    # 此子域下的统计图表StatsData中，以下的字段可以有值：
+    # 标签字段：无
+    # 值字段：follower，exposure，view，like，favorite，comment，share
+    #
+    # ITEM/TREND，某个具体案例的趋势变化情况
+    # 此子域下的统计图表StatsData中，以下的字段可以有值：
+    # 标签字段：无
+    # 值字段：exposure，view，like，favorite，comment，share
+    TREND
+}
+
+
+
+
+type Mutation {
+    # 新增或更新用户个人信息
+    # 如果关联的渠道、省份等不存在，则配套创建并关联
+    UpdateUserInfo (inputs: [UserInfoInput!]!): [UpdateResult!]!
+
+    # 新增或更新案例
+    # 如果关联的用户个人信息、渠道不存在，则配套创建并关联
+    # 如果已存在案例，且输入包含评论数据，则现有评论全部清空并重写
+    UpdateItem (inputs: [ItemInput!]!): [UpdateResult!]!
+
+    # 新增评论实体
+    # 不会对现有的更新！
+    # 如果评论关联的案例和渠道来源不存在，则操作无效！
+    UpdateComment (inputs: [CommentInput!]!): [UpdateResult!]!
+
+    # 新增或更新渠道实体
+    UpdateSource (inputs: [SourceInput!]!): [UpdateResult!]!
+
+    # 新增或更新Mcn实体
+    UpdateMcn (inputs: [McnInput!]!): [UpdateResult!]!
+
+    # 新增或更新统计数据信息
+    # 如果关联的用户个人信息、案例、渠道等不存在，则配套创建并关联
+    UpdateStats (inputs: [StatsInput!]!): [UpdateResult!]!
+}
+
+input UserInfoInput {
+    source: String! # 渠道名称（直接对应Source.id）
+    id: String! # 用户ID（注意：是渠道给出的系统ID）
+    nickname: String # 昵称
+    type: UserType # 用户类型（kol博主，user普通用户）
+    isPrimary: Boolean # 此渠道是否是博主个人信息主要发布渠道
+    phone: String # 电话号
+    wechat: String # 微信号
+    avatar: String # 用户头像的链接，要求是一个可访问的图片的URL
+    signature: String # 用户签名
+    gender: Gender # 性别
+    birthdate: String # 生日
+    province: String # 省份名称（直接对应Province.name）
+    city: String # 城市名称（直接对应City.name）
+    constellation: Constellation # 星座
+    mcn: String # MCN名称（直接对应Mcn.name）
+    mcnId: String # mcn在source字段指定的渠道下的系统id
+    tags: [String!] # 标签
+    priceVideo: Int # 拍摄单条视频的报价（抖音中指短视频）
+    priceLongVideo: Int # 拍摄单条视频的报价（抖音中指短视频）
+    priceArticle: Int # 发表一篇文章的报价
+    following: Int # 关注数
+    follower: Int # 粉丝数
+    viewMedian: Int # 观看量中位数（观看量指视频播放量或文章阅读量）
+    viewTotal: Int # 总观看量
+    likeMean: Int # 平均点赞量
+    favoriteMean: Int # 平均收藏量
+    commentMean: Int # 平均评论量
+    shareMean: Int # 平均转发量
+    itemCompleted: Int # 已完成案例数
+    itemTotal: Int # 总案例数
+    itemCompleteTimeMean: Int # 平均每笔订单完成耗时
+    timeCreated: String # 博主在渠道系统的注册时间
+    timeUpdated: String # 博主在渠道系统的最后一次更新时间
+}
+
+input ItemInput {
+    source: String! # 渠道名称（直接对应Source.id）
+    id: String! # 案例ID（注意：是渠道给出的系统ID）
+    author: String! # Kol ID（直接对应UserInfo.id）
+    title: String # 标题
+    type: ItemType # 类型（article文章或video视频）
+    cover: String # 封面图片URL
+    coverAnimated: String # 封面动态图片URL
+    url: String # 案例链接，能直接观看内容，如抖音视频链接等
+    content: String # 案例内容，如果是文章那就是正文内容
+    brands: [String!] # 关联品牌
+    comments: [ItemCommentInput!] # 评论内容
+    exposure: Int # 曝光量
+    view: Int # 观看量（观看量指视频播放量或文章阅读量）
+    like: Int # 点赞量
+    favorite: Int # 收藏量
+    comment: Int # 评论量
+    share: Int # 转发量
+    timeCreated: String # 案例在渠道系统的发布时间
+    timeUpdated: String # 案例在渠道系统的最后一次更新时间
+}
+
+input CommentInput {
+    source: String! # 渠道名称（直接对应Source.id）
+    item: String! # 案例ID（直接对应Item.id）
+    content: String! # 评论内容
+    author: String # 评论作者（直接对应UserInfo.id)
+    like: Int # 点赞量
+    timeCreated: String # 评论在渠道系统的发布时间
+    timeUpdated: String # 评论在渠道系统的最后一次更新时间
+}
+
+input ItemCommentInput {
+    content: String! # 评论内容
+    author: String # 评论作者（直接对应UserInfo.id)
+    like: Int # 点赞量
+    timeCreated: String # 评论在渠道系统的发布时间
+    timeUpdated: String # 评论在渠道系统的最后一次更新时间
+}
+
+input SourceInput {
+    id: ID! # 渠道名称英文标识符（如douyin，kuaishou等，建议统一取自官网www.?.com中?名称）
+    name: String # 渠道名称中文
+    url: String # 渠道官网链接
+}
+
+input McnInput {
+    name: ID! # 名称
+    fullName: String # 完整注册公司名称
+    logo: String # 要求是一个可访问的图片的URL
+    description: String # 机构描述
+    kolTotal: Int # 总签约博主数
+    followerTotal: Int # 总博主粉丝数
+}
+
+input StatsInput { # 统计图表，一般可以可视化为图或表
+    domain: StatsDomain! # 业务域
+    type: StatsType! # 统计类型
+    user: String # 图表关联用户（直接关联UserInfo.id)
+    item: String # 图表关联案例（直接关联Item.id)
+    source: String! # 图表关联的用户或案例的渠道来源（直接关联Source.id）
+
+    data: [StatsDataInput!] # 统计数据
+}
+
+input StatsDataInput { # 统计数据
+    time: String! # 此条统计数据的业务时间
+
+    # 标签字段（用于划分业务维度和范围，定位和time series DB中的tags类似）
+    gender: Gender # 性别
+    age: IntRangeInput # 年龄区间
+    interest: String # 兴趣，一般指粉丝感兴趣的标签（直接关联Tag.name）
+    province: String # 省份（直接关联Province.name）
+    activity: String # 活跃度，一般指粉丝活跃度，如轻度、中度、重度
+    phoneBrand: String # 手机品牌，一般指粉丝使用的手机品牌（直接关联Brand.name）
+
+    # 值字段（用于存储统计值，定位和time series DB中的fields类似）
+    percent: Float # 百分比值，一般用于统计分布比例，如男粉丝占全部粉丝的比例等
+    count: Int # 整数总和，一般用于统计分布大小，如男粉丝的总数等
+    follower: Int # 粉丝数量
+    exposure: Int # 曝光量
+    view: Int # 观看量（观看量指视频播放量或文章阅读量）
+    like: Int # 点赞量
+    favorite: Int # 收藏量
+    comment: Int # 评论量
+    share: Int # 转发量
+}
+
+input IntRangeInput { # 表示一个整数区间范围，左开右闭，例如[3, 6)
+    start: Int # 范围起始，为空则表示-∞
+    end: Int # 范围终止，为空则表示+∞
+}
+
+type UpdateResult {
+    ctime: String # 该条数据在系统的创建时间
+    mtime: String # 该条数据在系统的修改时间
+    message: String # 操作信息
+}

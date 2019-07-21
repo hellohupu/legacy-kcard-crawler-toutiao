@@ -1,7 +1,5 @@
 import json
 import os
-import sys 
-sys.path.append('/Users/GYB/code/puppeteer-spider')
 from api import BaseClient, ItemInputTransformer
 
 Fields = [

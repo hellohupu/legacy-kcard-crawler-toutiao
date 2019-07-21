@@ -3,3 +3,4 @@ creds.js
 output/
 __pycache__/
 *.pyc
+.vscode/

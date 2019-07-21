@@ -2,8 +2,7 @@ import json
 import os
 import sys 
 sys.path.append('/Users/GYB/code/puppeteer-spider')
-from convert2csv import cvs_title, write2csv
-from src.graphql.api import UserInfoInputTransformer, BaseClient
+from api import UserInfoInputTransformer, BaseClient
 
 Fields = [
         # "is_visible",
@@ -68,29 +67,28 @@ class Convertor:
     def convert2object(self, filename):
         with open(filename, 'r') as f:
             data = json.load(f)
-            info = json.loads(json.dumps(data.get('data')), object_hook=AuthorInfo)
+            info = json.loads(json.dumps(data.get('data'),ensure_ascii=False), object_hook=AuthorInfo)
         return info
+# class Convertor2Csv(Convertor):
+#     def convert(self, filenames, dirpath, output):
+#         data = [cvs_title(Fields)]
+#         for author in self.iter_objects(filenames,dirpath,output):
+#             line = self.convert2csvstr(author)
+#             data.append(line)
+#         write2csv(data, output)
 
-class Convertor2Csv(Convertor):
-    def convert(self, filenames, dirpath, output):
-        data = [cvs_title(Fields)]
-        for author in self.iter_objects(filenames,dirpath,output):
-            line = self.convert2csvstr(author)
-            data.append(line)
-        write2csv(data, output)
-
-    def convert2csvstr(self, author_info):
-        csv = []
-        for field in Fields:
-            data = getattr(author_info, field, 'null')
-            if field == 'tags':
-                value = ";".join(json.loads(data))
-            elif field == 'price_info':
-                value =";".join([":".join([getattr(info,"desc"),str(getattr(info,'price'))]) for info in data])
-            else:
-                value = str(data)
-            csv.append(value)
-        return ",".join(csv)
+#     def convert2csvstr(self, author_info):
+#         csv = []
+#         for field in Fields:
+#             data = getattr(author_info, field, 'null')
+#             if field == 'tags':
+#                 value = ";".join(json.loads(data))
+#             elif field == 'price_info':
+#                 value =";".join([":".join([getattr(info,"desc"),str(getattr(info,'price'))]) for info in data])
+#             else:
+#                 value = str(data)
+#             csv.append(value)
+#         return ",".join(csv)
 
 class Convertor2UserInput(Convertor):
 
@@ -98,10 +96,10 @@ class Convertor2UserInput(Convertor):
         result = []
         for author in self.iter_objects(filenames,dirpath,output):
             result.append(self.convert2Dict(author))
-            if len(result) == 10:
+            if len(result) >= 5:
                 BaseClient().update_userinfo(result)
                 result.clear()
-
+                
     def convert2Dict(self, author_info):
         ts = UserInfoInputTransformer(author_info)
         ts.transform()

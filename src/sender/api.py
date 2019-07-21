@@ -2,10 +2,10 @@
 from sgqlc.endpoint.http import HTTPEndpoint
 from sgqlc.operation import Operation
 import sys
-sys.path.append("/Users/GYB/code/puppeteer-spider/src/graphql/")
-import src.graphql.schema as schema
+from schema import schema
 import json
 from datetime import datetime
+import requests
 
 url = 'http://www.catatech.cn:3003/query'
 
@@ -23,15 +23,43 @@ class BaseClient:
         data = endpoint(operation)
         return data
 
-    def update_userinfo(self, json_data):
+    def update_userinfo(self, data):
         op = self.mutation_operation()
-        update_result = op.update_user_info(inputs=json_data)
+        update_result = op.update_user_info(inputs=data)
+        update_result.message()
+        print(op)
+        data = self.do_request(op)
+        print(data)
+        # self.update_userinfo_v2(data)
+
+    def update_statsinfo(self, data):
+        op = self.mutation_operation()
+        update_result = op.update_stats(inputs=data)
         update_result.message()
         print(op)
         data = self.do_request(op)
         print(data)
 
+    def update_itemsinfo(self, data):
+        op = self.mutation_operation()
+        update_result = op.update_item(inputs=data)
+        update_result.message()
+        print(op)
+        data = self.do_request(op)
+        print(data)
 
+    def update_userinfo_v2(self, data):
+        query = '''
+        mutation post_data($datas:[UserInfoInput!]!){
+            UpdateUserInfo(inputs:$datas){
+                message
+            }
+        }
+        '''
+        variables = {'datas': data}
+        endpoint = HTTPEndpoint(url)
+        resp = endpoint(query, variables)
+        print(resp)
 
 class Transformer(object):
 
@@ -90,30 +118,57 @@ class CommentInputTransformer(Transformer):
     }
 
 class ItemInputTransformer(Transformer):
-    transformer_map = {
-        "source",
-        "id",
-        "author",
-        "title",
-        "type",
-        "is_business",
-        "is_accepted",
-        "is_completed",
-        "cover",
-        "cover_animated",
-        "url",
-        "content",
-        "brands",
-        "comments",
-        "exposure",
-        "view",
-        "like",
-        "favorite",
-        "comment",
-        "share",
-        "time_created",
-        "time_updated",
+    transform_map = {
+        "source" : "source",
+        "item_id": "id",
+        "author": "author",
+        "item_title" :"title",
+        "type": "type",
+        "url":"url",
+        "play":"view",
+        "like":"like",
+        "brands": "brands",
+        "comments":"comments",
+        "comment":"comment",
+        "share":"share",
+        "create_time": ("time_created","Date"),
+        "Null":"is_business",
+        "Null":"is_accepted",
+        "Null":"is_completed",
+        "Null":"cover",
+        "Null":"cover_animated",
+        "Null":"content",
+        "Null":"exposure",
+        "Null":"favorite",
+        "Null":"time_updated",
     }
+
+    def addon(self, key, value):
+        if value == "source":
+            self.result[value] = "toutiao"
+            return True
+        if value == "type":
+            self.result[value] = "VIDEO"
+            return True
+        if value == "brands":
+            self.result[value] = ["Null"]
+            return True
+        if value == "comments":
+            self.result[value] = [{"content":"null"}]
+        if key == "Null":
+            return True
+        return False
+
+
+# class StatsInputTransformer(Transformer):
+#     transform_map = {
+#     "domain",
+#     "user",
+#     "item",
+#     "source",
+#     "data",
+#     }
+
 
 class UserInfoInputTransformer(Transformer):
     transform_map = {
@@ -146,7 +201,7 @@ class UserInfoInputTransformer(Transformer):
             self.result[value] = "toutiao"
             return True
         if value == 'tags':
-            self.result[value] = ";".join(json.loads(getattr(self.element, key)))
+            self.result[value] = json.loads(getattr(self.element, key))
             return True
         if value == "gender":
             self.result[value] = "MALE" if getattr(self.element, key) == 1 else "FEMALE"
